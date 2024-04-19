@@ -1,0 +1,13 @@
+train: /Users/anuahuja/Desktop/2024/Computer Vision/Hawkeye/Hawkeye.v1i.yolov9/train/images
+val: /Users/anuahuja/Desktop/2024/Computer Vision/Hawkeye/Hawkeye.v1i.yolov9/valid/images
+test: /Users/anuahuja/Desktop/2024/Computer Vision/Hawkeye/Hawkeye.v1i.yolov9/test/images
+
+nc: 1
+names: ['Shuttle']
+
+roboflow:
+  workspace: anu-ahuja
+  project: hawkeye-yi8la
+  version: 1
+  license: CC BY 4.0
+  url: https://universe.roboflow.com/anu-ahuja/hawkeye-yi8la/dataset/1

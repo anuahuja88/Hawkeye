@@ -1,0 +1,12 @@
+names:
+- Shuttle
+nc: 1
+roboflow:
+  license: CC BY 4.0
+  project: hawkeye-yi8la
+  url: https://universe.roboflow.com/anu-ahuja/hawkeye-yi8la/dataset/1
+  version: 1
+  workspace: anu-ahuja
+test: ../test/images
+train: Hawkeye-1/train/images
+val: Hawkeye-1/valid/images
