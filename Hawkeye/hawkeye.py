@@ -1,7 +1,7 @@
 import numpy as np
 import cv2
 import os
-
+from ultralytics import YOLO
 CHECKERBOARD_SIZE = (9, 6)
 
 min_thres = 125
@@ -107,7 +107,9 @@ def Hough_line_probabalistic(video_file):
 
 def main():
     # Hough_line_standard("Hawkeye/Videos/first.mp4")
-    Hough_line_probabalistic("Hawkeye/Videos/first.mp4")
+    # Hough_line_probabalistic("Hawkeye/Videos/new1.mp4")
+    model = YOLO('runs/detect/train/weights/best.pt')
+    model.predict("Hawkeye/Videos/new1.mp4", save = True, show = True)
 
 if __name__ == "__main__":
     main()
