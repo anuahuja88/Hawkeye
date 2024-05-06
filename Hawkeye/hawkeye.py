@@ -1,7 +1,6 @@
 import numpy as np
 import cv2
 import os
-import math
 
 CHECKERBOARD_SIZE = (9, 6)
 
