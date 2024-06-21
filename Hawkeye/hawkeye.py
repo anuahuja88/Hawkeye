@@ -1,113 +1,95 @@
 import numpy as np
 import cv2
 import os
+from collections import Counter
 from ultralytics import YOLO
-CHECKERBOARD_SIZE = (9, 6)
 
-min_thres = 125
-max_thres = 200
-hough_thres = 100
-
-
-def calibrate_iphone():
-    # Termination criteria for cornerSubPix
-    criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)
-
-    # Prepare object points, like (0,0,0), (1,0,0), (2,0,0) ....,(6,5,0)
-    objp = np.zeros((CHECKERBOARD_SIZE[0] * CHECKERBOARD_SIZE[1],3), np.float32)
-    objp[:,:2] = np.mgrid[0:CHECKERBOARD_SIZE[0], 0:CHECKERBOARD_SIZE[1]].T.reshape(-1, 2)
-
-    # Arrays to store object points and image points from all the images.
-    objpoints = [] # 3d point in real world space.
-    imgpoints = [] # 2d points in image plane.
-
-    for fname in os.listdir("Hawkeye/Calibration images"):
-        print(fname)
-        img = cv2.imread(f"Hawkeye/Calibration images/{fname}")
-        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        print(img.shape)
-
-        if img.shape == (2048, 1536, 3):
-            # Find checkerboard corners
-            ret, corners = cv2.findChessboardCorners(gray, CHECKERBOARD_SIZE, None)
-
-            if ret:
-                objpoints.append(objp)
-                corners_refined = cv2.cornerSubPix(gray, corners, (11, 11), (-1, -1), criteria=(cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001))
-                imgpoints.append(corners_refined)
-
-                # Draw and display the corners
-                img = cv2.drawChessboardCorners(img, CHECKERBOARD_SIZE, corners_refined, ret)
-                cv2.imshow('Corners Detected', img)
-                cv2.waitKey(500)  # Wait for a moment to display the image
-
-    cv2.destroyAllWindows()
-
-    # Calibrate camera
-    ret, mtx, dist, _, _ = cv2.calibrateCamera(objpoints, imgpoints, gray.shape[::-1], None, None)
-    cv2.destroyAllWindows()
-
-    h, w = gray.shape[:2]
-    newcameramtx, roi = cv2.getOptimalNewCameraMatrix(mtx, dist, (w,h), 1, (w,h))
-    np.savetxt('camera_matrix.npy', mtx)
-    np.savetxt('distortion_coeff.npy', dist)
-    np.savetxt('new_cam_matrix.npy', newcameramtx)
-    return newcameramtx
+def compute_line_equation(vector, point):
+    """
+    Compute the line equation y = mx + c from the vector and a point.
+    """
+    (dx, dy) = vector
+    (x1, y1) = point
+    
+    if dx == 0:
+        # Vertical line case: x = x1
+        return None, None, x1
+    
+    # Calculate the slope (m)
+    m = dy / dx
+    
+    # Calculate the y-intercept (c) using y = mx + c -> c = y - mx
+    c = y1 - m * x1
+    
+    return m, c, None
 
 def Hough_line_probabalistic(video_file):
+    vectorLists = []
+    linePoints = []
     cap = cv2.VideoCapture(video_file)
-
-    def change_min(x):
-        global min_thres
-        min_thres = x
-
-    def change_max(x):
-        global max_thres
-        max_thres = x
-
-    def change_hough(x):
-        global hough_thres
-        hough_thres = x
-
-    cv2.namedWindow('Video')
-    cv2.createTrackbar('Min Threshold', 'Video', min_thres, 255, change_min)
-    cv2.createTrackbar('Max Threshold', 'Video', max_thres, 255, change_max)
-    cv2.createTrackbar('Hough Threshold', 'Video', hough_thres, 255, change_hough)
+    back_line_vector = None
 
     while cap.isOpened():
         ret, frame = cap.read()
         if not ret:
             break
 
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            break
-
-        hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
         grey = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        img_blur = cv2.blur(grey, (3,3))
+        img_blur = cv2.GaussianBlur(grey, (5, 5), 0)
+        edges = cv2.Canny(img_blur, 50, 150, apertureSize=3)
 
-        edges = cv2.Canny(img_blur, 130, 250, None, 3)
-
-        linesP = cv2.HoughLinesP(edges, 1, np.pi / 180, 0, None, 50, 10)
+        linesP = cv2.HoughLinesP(edges, 1, np.pi / 180, 100, minLineLength=100, maxLineGap=10)
 
         if linesP is not None:
             for i in range(0, len(linesP)):
                 l = linesP[i][0]
-                print(f"Point 1:{(l[0], l[1])}")
-                print(f"Point 2:{(l[2], l[3])}")
-                cv2.line(edges, (l[0], l[1]), (l[2], l[3]), (255,255,255), 2, cv2.LINE_AA)
+                line_length = np.sqrt((l[2] - l[0])**2 + (l[3] - l[1])**2)
+                orientation = abs(l[3] - l[1]) / abs(l[2] - l[0] + 1e-5)
 
-        cv2.imshow('Video', edges)
+                if line_length > 200 and orientation > 0.1:  # Adjust these thresholds as needed
+                    cv2.line(frame, (l[0], l[1]), (l[2], l[3]), (0, 255, 0), 2, cv2.LINE_AA)
+                    back_line_vector = (l[2] - l[0], l[3] - l[1])
+                    vectorLists.append(back_line_vector)
+                    linePoints.append((l[0], l[1], l[2], l[3]))
+                    print(f"Back line detected: Point 1: ({l[0]}, {l[1]}), Point 2: ({l[2]}, {l[3]})")
+                    print(f"Back line vector: {back_line_vector}")
+
+        cv2.imshow('Video', frame)
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
 
-    # Release resources
     cap.release()
     cv2.destroyAllWindows()
+    
+    # Find the most frequent vector
+    if vectorLists:
+        vector_counts = Counter(vectorLists)
+        best_line_vector, best_line_count = vector_counts.most_common(1)[0]
+        
+        # Find the first occurrence of this vector to get its points
+        for points in linePoints:
+            (x1, y1, x2, y2) = points
+            if (x2 - x1, y2 - y1) == best_line_vector:
+                point = (x1, y1)
+                break
+        
+        m, c, vertical_x = compute_line_equation(best_line_vector, point)
+        if m is not None:
+            print(f"Line equation: y = {m}x + {c}")
+        else:
+            print(f"Vertical line at x = {vertical_x}")
+        
+        return best_line_vector
+    else:
+        return None
 
 def main():
-    # Hough_line_standard("Hawkeye/Videos/first.mp4")
-    # Hough_line_probabalistic("Hawkeye/Videos/new1.mp4")
+    # vector = Hough_line_probabalistic("Hawkeye/Videos/new1.mp4")
+    # if vector is not None:
+    #     print(f"Most frequent back line vector: {vector}")
+    # else:
+    #     print("No back line detected")
+
     model = YOLO('runs/detect/train/weights/best.pt')
     model.predict("Hawkeye/Videos/new1.mp4", save = True, show = True)
 
