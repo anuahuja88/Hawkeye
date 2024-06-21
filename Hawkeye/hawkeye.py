@@ -1,8 +1,8 @@
 import numpy as np
 import cv2
-import os
 from collections import Counter
 from ultralytics import YOLO
+import os
 
 def compute_line_equation(vector, point):
     """
@@ -18,7 +18,7 @@ def compute_line_equation(vector, point):
     # Calculate the slope (m)
     m = dy / dx
     
-    # Calculate the y-intercept (c) using y = mx + c -> c = y - mx
+    # Calculate the y-intercept (c) using y = mx + c -> c = y1 - m * x1
     c = y1 - m * x1
     
     return m, c, None
@@ -79,19 +79,81 @@ def Hough_line_probabalistic(video_file):
         else:
             print(f"Vertical line at x = {vertical_x}")
         
-        return best_line_vector
+        return best_line_vector, point, m, c, vertical_x
     else:
-        return None
+        return None, None, None, None, None
+
+def process_video(video_file, model):
+    cap = cv2.VideoCapture(video_file)
+    frame_count = 0
+    y_history = []
+    detected_landings = []
+    shuttle_num = 0
+    shuttle_pos_dict = {}
+    shuttle_position_prev = []
+
+    # Initialize the back line information
+    # back_line_vector, point, m, c, vertical_x = Hough_line_probabalistic(video_file)
+
+    # Create directory to save landing frames
+    output_dir = 'shuttle_landings'
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+
+    while cap.isOpened():
+        ret, frame = cap.read()
+        if not ret:
+            break
+        
+        results = model(frame)
+        for result in results:
+            boxes = result.boxes
+            if boxes is not None:
+                shuttle_positions = [box.xyxy[0].cpu().numpy() for box in boxes if box.cls == 0]  # Assuming class index 0 for shuttle
+                
+                if len(shuttle_positions) > 0:
+                    shuttle_positions = np.array(shuttle_positions)
+                    if shuttle_num not in shuttle_pos_dict:
+                        shuttle_pos_dict[shuttle_num] = [shuttle_positions]     
+                    else:
+                        shuttle_pos_dict[shuttle_num].append(shuttle_positions)
+                    shuttle_position_prev = [shuttle_positions]
+                    if len(shuttle_position_prev) == 0:
+                        shuttle_num += 1
+                else:
+                        shuttle_position_prev = []
+        
+            
+            #     if shuttle_positions:
+            #         shuttle_positions = np.array(shuttle_positions)
+            #         lowest_shuttle = shuttle_positions[np.argmin(shuttle_positions[:, 3])]  # y_max position
+            #         y_history.append((frame_count, lowest_shuttle[3]))
+
+            #         # Check for bounce: current frame y > previous frame y (shuttle going up)
+            #         if len(y_history) > 1 and y_history[-1][1] > y_history[-2][1]:
+            #             landing_frame = y_history[-2][0]
+            #             landing_position = y_history[-2][1]
+            #             detected_landings.append((landing_frame, landing_position))
+                        
+            #             # Save the frame with shuttle landing
+            #             cap.set(cv2.CAP_PROP_POS_FRAMES, landing_frame)
+            #             ret, landing_frame_img = cap.read()
+            #             if ret:
+            #                 frame_filename = os.path.join(output_dir, f"landing_frame_{landing_frame}.png")
+            #                 cv2.imwrite(frame_filename, landing_frame_img)
+            #                 print(f"Landing frame saved: {frame_filename}")
+                        
+            #             y_history = []  # Reset history for the next shuttle
+
+            # frame_count += 1
+
+    cap.release()
+    cv2.destroyAllWindows()
+    print(shuttle_num)
+    return shuttle_pos_dict
 
 def main():
-    # vector = Hough_line_probabalistic("Hawkeye/Videos/new1.mp4")
-    # if vector is not None:
-    #     print(f"Most frequent back line vector: {vector}")
-    # else:
-    #     print("No back line detected")
-
     model = YOLO('runs/detect/train/weights/best.pt')
-    model.predict("Hawkeye/Videos/new1.mp4", save = True, show = True)
-
+    shuttle_pos_dict = process_video("Hawkeye/Videos/new1.mp4", model)
 if __name__ == "__main__":
     main()
