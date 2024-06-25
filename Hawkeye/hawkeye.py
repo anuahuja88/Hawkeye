@@ -206,14 +206,21 @@ def check_in_or_out(bbox, m, c, vertical_x):
             return "In"
         
 
-def visualise_results(video_file, landing_positions, m, c, vertical_x, annotation_duration=1):
+
+def visualise_results(video_file, landing_positions, m, c, vertical_x, output_file, annotation_duration=1):
     cap = cv2.VideoCapture(video_file)
-    result = ''
     num = 0
     
-    # Get the frame rate of the video
+    # Get the frame rate and frame size of the video
     fps = cap.get(cv2.CAP_PROP_FPS)
+    frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     frame_duration = int(1000 / fps)  # Duration per frame in milliseconds
+    result = ""
+
+    # Define the codec and create a VideoWriter object
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # You can use other codecs as well
+    out = cv2.VideoWriter(output_file, fourcc, fps, (frame_width, frame_height))
 
     while cap.isOpened():
         ret, frame = cap.read()
@@ -229,22 +236,26 @@ def visualise_results(video_file, landing_positions, m, c, vertical_x, annotatio
                 num += 1
                 # Display frame with annotations and add delay for annotation
                 cv2.putText(frame, f"Shuttle {num}: {result}", (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2, cv2.LINE_AA)
+                out.write(frame)  # Write the frame with annotation to the output file
                 cv2.imshow('Video with Annotations', frame)
                 if cv2.waitKey(int(annotation_duration * 1000)) & 0xFF == ord('q'):
                     break
 
         # Display frame without annotation delay
         cv2.putText(frame, f"Shuttle {num}: {result}", (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2, cv2.LINE_AA)
+        out.write(frame)  # Write the frame without annotation to the output file
         cv2.imshow('Video with Annotations', frame)
-        
+
         # Control playback speed to match the original video speed
         if cv2.waitKey(frame_duration) & 0xFF == ord('q'):
             break
 
     cap.release()
+    out.release()
     cv2.destroyAllWindows()
+
 def main():
-    video_file = "Hawkeye/Videos/new1.mp4"
+    video_file = "Hawkeye/Videos/new2.mp4"
     model = YOLO('runs/detect/train/weights/best.pt')
     shuttle_pos_dict = shuttle_positions(video_file, model)
     landing_positions = get_landing_frame(video_file, shuttle_pos_dict)
@@ -254,7 +265,7 @@ def main():
         result = check_in_or_out(bbox, m, c, vertical_x)
         print(f"Shuttle {shuttle_num} is {result}")
 
-    visualise_results(video_file, landing_positions, m, c, vertical_x)
+    visualise_results(video_file, landing_positions, m, c, vertical_x, 'output.mp4')
 
 if __name__ == "__main__":
     main()
